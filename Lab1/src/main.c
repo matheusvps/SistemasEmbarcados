@@ -5,15 +5,9 @@
 #include "serial.h"
 #include "st7789.h"
 #include "board.h"
+#include "game.h"
+#include "uart.h"
 
-static inline int  uart_rx_ready(void) { return (USART1->SR & USART_SR_RXNE) != 0; }
-static inline char uart_getc(void)     { return (char)USART1->DR; }
-
-static void demo_clear(void){
-    printf("[demo 1] Clear screen (black)\r\n");
-    st7789_fill_screen_dma(C_BLACK);
-    st7789_draw_text_5x7(20, 20, "CLEAR BLACK", C_WHITE, 2, 0, 0);
-}
 
 static void demo_pixels(void){
     printf("[demo 2] Random pixels\r\n");
@@ -116,8 +110,9 @@ int main(void){
 
     printf("\r\n=== MENU ST7789 ===\r\n");
     printf("Digite 1..9 e pressione Enter:\r\n");
-    printf("1: Clear\n2: Pixels\n3: Hlines\n4: Vlines\n5: Rects\n");
+    printf("1: Game demo\n2: Pixels\n3: Hlines\n4: Vlines\n5: Rects\n");
     printf("6: Fills\n7: Circles\n8: FillCircles\n9: Text\r\n");
+    printf("===================\r\n");
 
     st7789_fill_screen(C_BLACK);
 
@@ -125,7 +120,7 @@ int main(void){
         if (uart_rx_ready()){
             char c = uart_getc();
             switch(c){
-                case '1': demo_clear(); break;
+                case '1': demo_game(); break;
                 case '2': demo_pixels(); break;
                 case '3': demo_hlines(); break;
                 case '4': demo_vlines(); break;
