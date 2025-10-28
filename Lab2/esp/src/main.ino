@@ -7,7 +7,7 @@
 
 char buffer[64];
 
-void getline(char * buffer) {
+void getLine(char* buffer) {
     uint8_t idx = 0;
     char c;
     do {
@@ -23,7 +23,7 @@ float mpu6050_accel_g(int raw) {
 }
 
 float mpu6050_gyro_dps(int16_t raw) {
-  return raw / 131.0f;
+    return raw / 131.0f;
 }
 
 void setup() {
@@ -48,7 +48,7 @@ void loop() {
         HC12.write(str);
     }
     while (BOARD == 2) {
-        getline(buffer);
+        getLine(buffer);
 
         int rax = 0;
         int ray = 0;
@@ -67,18 +67,33 @@ void loop() {
         float gy = mpu6050_gyro_dps(rgy);
         float gz = mpu6050_gyro_dps(rgz);
 
-        // Serial.print(ax);
-        // Serial.print(",");
-        // Serial.print(ay);
-        // Serial.print(",");
-        // Serial.print(az);
-        // Serial.print(",");
-        Serial.print(gx);
+        Serial.print(ax);
         Serial.print(",");
-        Serial.print(gy);
+        Serial.print(ay);
         Serial.print(",");
-        Serial.print(gz);
-        Serial.print(",");
+        Serial.print(az);
         Serial.print("\n");
+
+        // Serial.print(gx);
+        // Serial.print(",");
+        // Serial.print(gy);
+        // Serial.print(",");
+        // Serial.print(gz);
+        // Serial.print("\n");
+
+        // if (fabs(gx) > 240) {
+        //
+        // }
+        //
+        if (ay < -1.2f) {
+            Serial.print("BATIDA\n");
+        }
+
+        else if (ay < -0.8f) {
+            Serial.print("FREADA BRUSCA\n");
+        }
+        else if (fabs(gz) > 200.0f) {
+            Serial.print("CURVA ACENTUADA\n");
+        }
     }
 }
