@@ -68,3 +68,59 @@ void HC12_LeaveATMode() {
     HC12_SET_PORT->BSRR = (1U << HC12_SET_PIN);         // set bit = HIGH
     delay_ms(80);
 }
+
+// === Binary Data Functions ===
+
+uint8_t HC12_CalculateChecksum(const mpu_data_packet_t *packet) {
+    uint8_t checksum = 0;
+    const uint8_t *data = (const uint8_t*)packet;
+    
+    // Calculate checksum for all bytes except the checksum field itself
+    for (int i = 0; i < sizeof(mpu_data_packet_t) - 1; i++) {
+        checksum ^= data[i];
+    }
+    return checksum;
+}
+
+void HC12_CreateDataPacket(mpu_data_packet_t *packet, int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int16_t gz) {
+    packet->magic = DATA_PACKET_MAGIC;
+    packet->ax = ax;
+    packet->ay = ay;
+    packet->az = az;
+    packet->gx = gx;
+    packet->gy = gy;
+    packet->gz = gz;
+    packet->checksum = HC12_CalculateChecksum(packet);
+}
+
+void HC12_SendDataPacket(const mpu_data_packet_t *packet) {
+    const uint8_t *data = (const uint8_t*)packet;
+    
+    for (int i = 0; i < sizeof(mpu_data_packet_t); i++) {
+        HC12_SendByte(data[i]);
+    }
+}
+
+uint8_t HC12_ReceiveDataPacket(mpu_data_packet_t *packet) {
+    uint8_t *data = (uint8_t*)packet;
+    
+    // Receive all bytes of the packet
+    for (int i = 0; i < sizeof(mpu_data_packet_t); i++) {
+        if (!HC12_ReceiveByte(&data[i])) {
+            return 0; // Timeout or error
+        }
+    }
+    
+    // Verify magic number
+    if (packet->magic != DATA_PACKET_MAGIC) {
+        return 0; // Invalid packet
+    }
+    
+    // Verify checksum
+    uint8_t calculated_checksum = HC12_CalculateChecksum(packet);
+    if (packet->checksum != calculated_checksum) {
+        return 0; // Checksum error
+    }
+    
+    return 1; // Success
+}
