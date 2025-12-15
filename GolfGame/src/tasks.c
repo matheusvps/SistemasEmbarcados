@@ -136,7 +136,7 @@ static void reset_ball(game_state_t* state) {
 
 // Tarefa MPU6050 com máquina de estados
 void task_mpu6050(void *pvParameters) {
-    const TickType_t xDelay = pdMS_TO_TICKS(20); // 50 Hz
+    const TickType_t xDelay = pdMS_TO_TICKS(40); // 25 Hz
     TickType_t xLastWakeTime = xTaskGetTickCount();
     mpu6050_raw_t raw_data;
     accel_data_t accel_data;
@@ -204,7 +204,7 @@ void task_mpu6050(void *pvParameters) {
 
 // Tarefa de atualização do jogo (física + renderização)
 void task_game_update(void *pvParameters) {
-    const TickType_t xDelay = pdMS_TO_TICKS(16); // 30 FPS
+    const TickType_t xDelay = pdMS_TO_TICKS(32); // 30 FPS
     TickType_t xLastWakeTime = xTaskGetTickCount();
     accel_data_t accel_data;
     float dt = 0.016f; // 16ms
@@ -309,13 +309,14 @@ void task_game_update(void *pvParameters) {
             clock.hours = clock.minutes = clock.seconds = 0;
         }
 
-        // Limpar tela (fundo verde)
-        st7789_fill_screen(0x4354); // Verde RGB565
+        // Limpar tela (fundo verde) - versão com DMA
+        // st7789_fill_screen(0x4354); // Versão CPU
+        st7789_fill_screen_dma(0x4354); // Versão com DMA
 
-        // Desenhar obstáculos
+        // Desenhar obstáculos (retângulos grandes) usando DMA
         for (size_t i = 0; i < obstacle_count; i++) {
-            st7789_fill_rect((uint16_t)obstacles[i].x, (uint16_t)obstacles[i].y,
-                             (uint16_t)obstacles[i].w, (uint16_t)obstacles[i].h, 0x7BEF);
+            st7789_fill_rect_dma((uint16_t)obstacles[i].x, (uint16_t)obstacles[i].y,
+                                 (uint16_t)obstacles[i].w, (uint16_t)obstacles[i].h, 0x7BEF);
             st7789_draw_rect((uint16_t)obstacles[i].x, (uint16_t)obstacles[i].y,
                              (uint16_t)obstacles[i].w, (uint16_t)obstacles[i].h, C_BLACK);
         }
@@ -336,10 +337,10 @@ void task_game_update(void *pvParameters) {
                              (int)end_x, (int)end_y, C_BLACK);
         }
 
-        // Desenhar barra de potência
+        // Desenhar barra de potência (área sólida vertical) usando DMA
         st7789_draw_rect(10, 10, 10, 160, C_BLACK);
         int power_height = (int)(state.power * 160.0f);
-        st7789_fill_rect(11, 170 - power_height, 8, power_height, C_RED);
+        st7789_fill_rect_dma(11, 170 - power_height, 8, power_height, C_RED);
 
         // Pontuação e status
         char info[24];

@@ -146,8 +146,8 @@ Ver `CELULA_CARGA_GUIA.md` para detalhes completos.
 
 - **Push button de lançamento**  
   - O botão físico em `PA10` é configurado com pull‑up interno em `button_init()` e lido pela função `button_is_pressed()`, que é chamada dentro de `task_button`.  
-  - `task_button` atualiza `shared_game_state.button_pressed` (protegido por `game_mutex`), indicando se o botão está pressionado no instante de amostragem.  
-  - Em `task_game_update`, é feita a detecção de borda de subida (transição de *não pressionado* para *pressionado*). Quando essa borda é detectada, a bola não está se movendo e o buraco ainda não foi concluído, a tarefa usa a potência atual (`power`) junto com `aim_theta` para calcular `ball_vx` e `ball_vy`, incrementa o contador de tacadas (`strokes`) e marca `shooting = 1`.
+  - `task_button` faz **debounce por software** em alta taxa (100 Hz) e gera um evento de clique (`button_event`), protegido por `game_mutex`, garantindo que cliques rápidos não sejam perdidos. O estado estável atual do botão fica em `shared_game_state.button_pressed`.  
+  - Em `task_game_update`, o evento de clique (`button_event`) é consumido sempre que a bola não está se movendo e o buraco ainda não foi concluído; a tarefa usa a potência atual (`power`) junto com `aim_theta` para calcular `ball_vx` e `ball_vy`, incrementa o contador de tacadas (`strokes`), marca `shooting = 1` e limpa o evento.
 
 ## Características do Jogo
 

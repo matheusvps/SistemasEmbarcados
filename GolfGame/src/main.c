@@ -25,6 +25,7 @@ int main(void) {
     // Inicializar display LCD
     printf("Inicializando LCD...\n");
     st7789_init();
+    st7789_set_speed_div(0);
     st7789_fill_screen(C_BLACK);
     delay_ms(100);
     
