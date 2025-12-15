@@ -12,6 +12,7 @@ QueueHandle_t accel_queue;
 SemaphoreHandle_t render_semaphore;
 SemaphoreHandle_t game_mutex;
 SemaphoreHandle_t clock_mutex;
+SemaphoreHandle_t lcd_mutex;   // Protege acesso concorrente ao LCD
 
 // Variáveis compartilhadas
 game_state_t shared_game_state;
@@ -217,34 +218,35 @@ void task_render(void *pvParameters) {
                 xSemaphoreGive(clock_mutex);
             }
             
-            // Limpar tela (fundo verde)
-            st7789_fill_screen(0x4354); // Verde RGB565
-            
-            // Desenhar buraco
-            st7789_fill_circle(200, 120, 20, C_BLACK);
-            
-            // Desenhar bola
-            st7789_fill_circle((int)state.ball_x, (int)state.ball_y, 8, C_WHITE);
-            st7789_draw_circle((int)state.ball_x, (int)state.ball_y, 8, C_BLACK);
-            
-            // Desenhar linha de mira (se não estiver atirando)
-            if (!state.shooting) {
-                float end_x = state.ball_x + 40.0f * cosf(state.aim_theta);
-                float end_y = state.ball_y + 40.0f * sinf(state.aim_theta);
-                st7789_draw_line((int)state.ball_x, (int)state.ball_y,
-                                (int)end_x, (int)end_y, C_BLACK);
+            // Toda a renderização do jogo e HUD ocorre sob o mutex do LCD
+            if (xSemaphoreTake(lcd_mutex, portMAX_DELAY) == pdTRUE) {
+                // Limpar apenas a área de jogo (mantém faixa superior para o relógio)
+                st7789_fill_rect(0, 20, 240, 220, 0x4354); // Verde RGB565
+                
+                // Desenhar buraco
+                st7789_fill_circle(200, 120, 20, C_BLACK);
+                
+                // Desenhar bola
+                st7789_fill_circle((int)state.ball_x, (int)state.ball_y, 8, C_WHITE);
+                st7789_draw_circle((int)state.ball_x, (int)state.ball_y, 8, C_BLACK);
+                
+                // Desenhar linha de mira (se não estiver atirando)
+                if (!state.shooting) {
+                    float end_x = state.ball_x + 40.0f * cosf(state.aim_theta);
+                    float end_y = state.ball_y + 40.0f * sinf(state.aim_theta);
+                    st7789_draw_line((int)state.ball_x, (int)state.ball_y,
+                                    (int)end_x, (int)end_y, C_BLACK);
+                }
+                
+                // Desenhar barra de potência (abaixo da faixa do relógio)
+                st7789_draw_rect(10, 30, 10, 160, C_BLACK);
+                int power_height = (int)(state.power * 160.0f);
+                st7789_fill_rect(11, 190 - power_height, 8, power_height, C_RED);
+
+                // (Relógio passa a ser desenhado somente pela task_clock)
+
+                xSemaphoreGive(lcd_mutex);
             }
-            
-            // Desenhar barra de potência
-            st7789_draw_rect(10, 10, 10, 160, C_BLACK);
-            int power_height = (int)(state.power * 160.0f);
-            st7789_fill_rect(11, 170 - power_height, 8, power_height, C_RED);
-            
-            // Desenhar relógio (hh:mm:ss)
-            char time_str[9];
-            snprintf(time_str, sizeof(time_str), "%02d:%02d:%02d", 
-                    clock.hours, clock.minutes, clock.seconds);
-            st7789_draw_text_5x7(150, 5, time_str, C_WHITE, 1, 1, C_BLACK);
         }
     }
 }
@@ -279,7 +281,20 @@ void task_clock(void *pvParameters) {
                     }
                 }
             }
+
+            // Capturar uma cópia local do horário para desenhar
+            clock_time_t current = shared_clock;
             xSemaphoreGive(clock_mutex);
+
+            // Desenhar apenas o relógio no topo da tela, independente do jogo
+            if (xSemaphoreTake(lcd_mutex, portMAX_DELAY) == pdTRUE) {
+                char time_str[9];
+                snprintf(time_str, sizeof(time_str), "%02d:%02d:%02d",
+                         current.hours, current.minutes, current.seconds);
+                // Faixa superior dedicada ao relógio (não é apagada pela renderização do jogo)
+                st7789_draw_text_5x7(150, 5, time_str, C_WHITE, 1, 1, C_BLACK);
+                xSemaphoreGive(lcd_mutex);
+            }
         }
         
         // Temporização determinística
@@ -328,6 +343,7 @@ void tasks_init(void) {
     render_semaphore = xSemaphoreCreateBinary();
     game_mutex = xSemaphoreCreateMutex();
     clock_mutex = xSemaphoreCreateMutex();
+    lcd_mutex   = xSemaphoreCreateMutex();
     
     // Criar tarefas
     xTaskCreate(task_mpu6050, "MPU6050", 256, NULL, 3, NULL);
