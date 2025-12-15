@@ -5,6 +5,7 @@
 #include "serial.h"
 #include "st7789.h"
 #include "hx711.h"
+#include "framebuffer.h"
 #include <stdio.h>
 #include <math.h>
 #include <stddef.h>
@@ -136,6 +137,7 @@ static void reset_ball(game_state_t* state) {
 
 // Tarefa MPU6050 com máquina de estados
 void task_mpu6050(void *pvParameters) {
+    (void)pvParameters;
     const TickType_t xDelay = pdMS_TO_TICKS(40); // 25 Hz
     TickType_t xLastWakeTime = xTaskGetTickCount();
     mpu6050_raw_t raw_data;
@@ -204,7 +206,8 @@ void task_mpu6050(void *pvParameters) {
 
 // Tarefa de atualização do jogo (física + renderização)
 void task_game_update(void *pvParameters) {
-    const TickType_t xDelay = pdMS_TO_TICKS(32); // 30 FPS
+    (void)pvParameters;
+    const TickType_t xDelay = pdMS_TO_TICKS(50); // 20 FPS
     TickType_t xLastWakeTime = xTaskGetTickCount();
     accel_data_t accel_data;
     float dt = 0.016f; // 16ms
@@ -309,53 +312,58 @@ void task_game_update(void *pvParameters) {
             clock.hours = clock.minutes = clock.seconds = 0;
         }
 
-        // Limpar tela (fundo verde) - versão com DMA
-        // st7789_fill_screen(0x4354); // Versão CPU
-        st7789_fill_screen_dma(0x4354); // Versão com DMA
+        // =================== Composição off-screen no framebuffer ===================
+        // 1) Limpar framebuffer (fundo verde)
+        fb_clear(0x4354); // Verde RGB565
 
-        // Desenhar obstáculos (retângulos grandes) usando DMA
+        // 2) Desenhar obstáculos
         for (size_t i = 0; i < obstacle_count; i++) {
-            st7789_fill_rect_dma((uint16_t)obstacles[i].x, (uint16_t)obstacles[i].y,
-                                 (uint16_t)obstacles[i].w, (uint16_t)obstacles[i].h, 0x7BEF);
-            st7789_draw_rect((uint16_t)obstacles[i].x, (uint16_t)obstacles[i].y,
-                             (uint16_t)obstacles[i].w, (uint16_t)obstacles[i].h, C_BLACK);
+            fb_fill_rect((int)obstacles[i].x, (int)obstacles[i].y,
+                         (int)obstacles[i].w, (int)obstacles[i].h, 0x7BEF);
+            fb_draw_rect((int)obstacles[i].x, (int)obstacles[i].y,
+                         (int)obstacles[i].w, (int)obstacles[i].h, C_BLACK);
         }
 
-        // Desenhar buraco
-        st7789_fill_circle((int)HOLE_X, (int)HOLE_Y, HOLE_RADIUS + 4, C_BLACK);
-        st7789_fill_circle((int)HOLE_X, (int)HOLE_Y, HOLE_RADIUS, C_GREEN);
+        // 3) Desenhar buraco
+        fb_fill_circle((int)HOLE_X, (int)HOLE_Y, HOLE_RADIUS + 4, C_BLACK);
+        fb_fill_circle((int)HOLE_X, (int)HOLE_Y, HOLE_RADIUS, C_GREEN);
 
-        // Desenhar bola
-        st7789_fill_circle((int)state.ball_x, (int)state.ball_y, (int)BALL_RADIUS, C_WHITE);
-        st7789_draw_circle((int)state.ball_x, (int)state.ball_y, (int)BALL_RADIUS, C_BLACK);
+        // 4) Desenhar bola
+        fb_fill_circle((int)state.ball_x, (int)state.ball_y, (int)BALL_RADIUS, C_WHITE);
+        fb_draw_circle((int)state.ball_x, (int)state.ball_y, (int)BALL_RADIUS, C_BLACK);
 
-        // Desenhar linha de mira (se não estiver atirando)
+        // 5) Desenhar linha de mira (se não estiver atirando)
         if (!state.shooting) {
             float end_x = state.ball_x + 40.0f * cosf(state.aim_theta);
             float end_y = state.ball_y + 40.0f * sinf(state.aim_theta);
-            st7789_draw_line((int)state.ball_x, (int)state.ball_y,
-                             (int)end_x, (int)end_y, C_BLACK);
+            fb_draw_line((int)state.ball_x, (int)state.ball_y,
+                         (int)end_x, (int)end_y, C_BLACK);
         }
 
-        // Desenhar barra de potência (área sólida vertical) usando DMA
-        st7789_draw_rect(10, 10, 10, 160, C_BLACK);
+        // 6) Desenhar barra de potência
+        fb_draw_rect(10, 10, 10, 160, C_BLACK);
         int power_height = (int)(state.power * 160.0f);
-        st7789_fill_rect_dma(11, 170 - power_height, 8, power_height, C_RED);
+        if (power_height > 0) {
+            fb_fill_rect(11, 170 - power_height, 8, power_height, C_RED);
+        }
 
-        // Pontuação e status
+        // 7) Pontuação e status
         char info[24];
         snprintf(info, sizeof(info), "Tacadas: %u", state.strokes);
-        st7789_draw_text_5x7(25, 190, info, C_WHITE, 1, 1, C_BLACK);
+        fb_draw_text_5x7(25, 190, info, C_WHITE, 1, 1, C_BLACK);
 
         if (state.hole_completed) {
-            st7789_draw_text_5x7(120, 210, "Buraco!", C_YELL, 2, 2, C_BLACK);
+            fb_draw_text_5x7(120, 210, "Buraco!", C_YELL, 2, 2, C_BLACK);
         }
 
-        // Desenhar relógio (hh:mm:ss)
-        char time_str[9];
+        // 8) Desenhar relógio (hh:mm:ss)
+        char time_str[12];
         snprintf(time_str, sizeof(time_str), "%02d:%02d:%02d",
                  clock.hours, clock.minutes, clock.seconds);
-        st7789_draw_text_5x7(150, 5, time_str, C_WHITE, 1, 1, C_BLACK);
+        fb_draw_text_5x7(150, 5, time_str, C_WHITE, 1, 1, C_BLACK);
+
+        // 9) Enviar framebuffer completo para o LCD em um único blit por DMA
+        fb_present();
         
         // Temporização determinística
         vTaskDelayUntil(&xLastWakeTime, xDelay);
@@ -364,6 +372,7 @@ void task_game_update(void *pvParameters) {
 
 // Tarefa de relógio
 void task_clock(void *pvParameters) {
+    (void)pvParameters;
     const TickType_t xDelay = pdMS_TO_TICKS(1000); // 1 segundo
     TickType_t xLastWakeTime = xTaskGetTickCount();
     
@@ -402,6 +411,7 @@ void task_clock(void *pvParameters) {
 
 // Tarefa de leitura da célula de carga (substitui botão)
 void task_button(void *pvParameters) {
+    (void)pvParameters;
     const TickType_t xDelay = pdMS_TO_TICKS(50); // 20 Hz
     TickType_t xLastWakeTime = xTaskGetTickCount();
     

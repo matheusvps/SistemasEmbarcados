@@ -178,6 +178,24 @@ void st7789_fill_screen_dma(uint16_t color){
     st7789_fill_rect_dma(0,0,LCD_W,LCD_H,color);
 }
 
+/*
+ * Envia uma região retangular arbitrária (framebuffer parcial) usando DMA.
+ * - buffer deve conter w*h pixels em formato RGB565, ordenados por linhas.
+ * - pensado para uso com "stripes" ou regiões "dirty" renderizadas em RAM.
+ */
+void st7789_blit_region_dma(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *buffer){
+    if (x >= LCD_W || y >= LCD_H) return;
+    if (x + w > LCD_W) w = LCD_W - x;
+    if (y + h > LCD_H) h = LCD_H - y;
+    if (w == 0 || h == 0) return;
+
+    lcd_cmd(0x2A); lcd_d16(x);       lcd_d16(x + w - 1);
+    lcd_cmd(0x2B); lcd_d16(y);       lcd_d16(y + h - 1);
+    lcd_cmd(0x2C);
+
+    spi1_tx_dma_block(buffer, (uint32_t)w * (uint32_t)h);
+}
+
 void st7789_draw_pixel(uint16_t x, uint16_t y, uint16_t color){
     if (x >= LCD_W || y >= LCD_H) return;
     set_addr(x, y, x, y);

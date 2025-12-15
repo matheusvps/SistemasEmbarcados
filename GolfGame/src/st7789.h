@@ -15,6 +15,9 @@ void st7789_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c
 void st7789_fill_screen_dma(uint16_t color);
 void st7789_fill_rect_dma(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
 
+/* Envio de framebuffer parcial por DMA (w*h pixels em RGB565) */
+void st7789_blit_region_dma(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *buffer);
+
 /* GFX adicionais */
 void st7789_draw_pixel(uint16_t x, uint16_t y, uint16_t color);
 void st7789_draw_hline(uint16_t x, uint16_t y, uint16_t w, uint16_t color);
