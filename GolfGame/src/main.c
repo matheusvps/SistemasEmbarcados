@@ -37,9 +37,9 @@ int main(void) {
     printf("Criando tarefas FreeRTOS...\n");
     tasks_init();
     
-    printf("Iniciando scheduler FreeRTOS...\n");
     
     // Iniciar o scheduler do FreeRTOS
+    printf("Iniciando scheduler FreeRTOS...\n");
     vTaskStartScheduler();
     
     // Nunca deve chegar aqui
