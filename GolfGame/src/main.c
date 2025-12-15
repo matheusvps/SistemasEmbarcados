@@ -12,7 +12,6 @@
 
 // Configurações
 #define SERIAL_BAUDRATE 115200
-#define I2C_CLOCK_SPEED 100000
 
 int main(void) {
     // Inicialização básica do sistema
@@ -30,8 +29,10 @@ int main(void) {
     delay_ms(100);
     
     // Inicializar I2C para MPU6050
+    // A função i2c1_init_100k espera a frequência do barramento APB1 em Hz,
+    // não a velocidade desejada do I2C. No F411, APB1 costuma ser HCLK/2.
     printf("Inicializando I2C...\n");
-    i2c1_init_100k(I2C_CLOCK_SPEED);
+    i2c1_init_100k(SystemCoreClock / 2u);
     
     // Inicializar tarefas e objetos de sincronização
     printf("Criando tarefas FreeRTOS...\n");
