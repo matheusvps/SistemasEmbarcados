@@ -128,12 +128,15 @@ static void button_init(void) {
     BUTTON_SHOOT_PORT->PUPDR |= (1u << (BUTTON_SHOOT_PIN * 2)); // pull-up
 }
 
+// Colisão aproximada bola-retângulo usando AABB expandido.
+// Mais simples de resolver (empurrar para fora por um dos quatro lados).
 static int circle_rect_collision(float cx, float cy, float radius, const obstacle_t* ob) {
-    float closest_x = clampf(cx, ob->x, ob->x + ob->w);
-    float closest_y = clampf(cy, ob->y, ob->y + ob->h);
-    float dx = cx - closest_x;
-    float dy = cy - closest_y;
-    return (dx * dx + dy * dy) < (radius * radius);
+    // Verifica interseção entre o AABB da bola e o retângulo do obstáculo
+    if (cx + radius < ob->x) return 0;
+    if (cx - radius > ob->x + ob->w) return 0;
+    if (cy + radius < ob->y) return 0;
+    if (cy - radius > ob->y + ob->h) return 0;
+    return 1;
 }
 
 static void resolve_collisions(game_state_t* state) {
@@ -160,19 +163,49 @@ static void resolve_collisions(game_state_t* state) {
     get_obstacles_for_level(state->level, &obstacles, &obstacle_count);
 
     for (size_t i = 0; i < obstacle_count; i++) {
-        if (circle_rect_collision(state->ball_x, state->ball_y, BALL_RADIUS, &obstacles[i])) {
-            // Empurrar bola para fora do obstáculo invertendo componente dominante
-            float center_x = obstacles[i].x + obstacles[i].w / 2.0f;
-            float center_y = obstacles[i].y + obstacles[i].h / 2.0f;
-            float dx = state->ball_x - center_x;
-            float dy = state->ball_y - center_y;
-            if (fabsf(dx) > fabsf(dy)) {
-                state->ball_vx = -state->ball_vx * 0.6f;
-                state->ball_x += (dx > 0 ? 2.0f : -2.0f);
-            } else {
-                state->ball_vy = -state->ball_vy * 0.6f;
-                state->ball_y += (dy > 0 ? 2.0f : -2.0f);
-            }
+        const obstacle_t* ob = &obstacles[i];
+        if (!circle_rect_collision(state->ball_x, state->ball_y, BALL_RADIUS, ob)) {
+            continue;
+        }
+
+        // Calcula a penetração em cada lado do obstáculo considerando o raio da bola.
+        float left_pen   = (state->ball_x + BALL_RADIUS) - ob->x;                 // passou da esquerda
+        float right_pen  = (ob->x + ob->w) - (state->ball_x - BALL_RADIUS);       // passou da direita
+        float top_pen    = (state->ball_y + BALL_RADIUS) - ob->y;                 // passou do topo
+        float bottom_pen = (ob->y + ob->h) - (state->ball_y - BALL_RADIUS);       // passou da base
+
+        // Se qualquer penetração for negativa, não está realmente dentro
+        if (left_pen <= 0.0f || right_pen <= 0.0f || top_pen <= 0.0f || bottom_pen <= 0.0f) {
+            continue;
+        }
+
+        // Descobre o menor deslocamento necessário para sair do obstáculo
+        float min_pen = left_pen;
+        int side = 0; // 0 = esquerda, 1 = direita, 2 = topo, 3 = base
+
+        if (right_pen < min_pen) { min_pen = right_pen; side = 1; }
+        if (top_pen   < min_pen) { min_pen = top_pen;   side = 2; }
+        if (bottom_pen < min_pen){ min_pen = bottom_pen;side = 3; }
+
+        const float restitution = 0.6f;
+
+        switch (side) {
+            case 0: // Esquerda: empurrar bola para a esquerda do obstáculo
+                state->ball_x = ob->x - BALL_RADIUS;
+                state->ball_vx = -state->ball_vx * restitution;
+                break;
+            case 1: // Direita: empurrar bola para a direita do obstáculo
+                state->ball_x = ob->x + ob->w + BALL_RADIUS;
+                state->ball_vx = -state->ball_vx * restitution;
+                break;
+            case 2: // Topo: empurrar bola para cima
+                state->ball_y = ob->y - BALL_RADIUS;
+                state->ball_vy = -state->ball_vy * restitution;
+                break;
+            case 3: // Base: empurrar bola para baixo
+                state->ball_y = ob->y + ob->h + BALL_RADIUS;
+                state->ball_vy = -state->ball_vy * restitution;
+                break;
         }
     }
 }
@@ -329,23 +362,29 @@ void task_game_update(void *pvParameters) {
             
             // Atualizar posição da bola
             if (shared_game_state.shooting) {
-                shared_game_state.ball_x += shared_game_state.ball_vx * dt;
-                shared_game_state.ball_y += shared_game_state.ball_vy * dt;
-                
-                // Fricção (um pouco menor para a bola rolar mais)
-                shared_game_state.ball_vx *= 0.97f;
-                shared_game_state.ball_vy *= 0.97f;
-                
-                resolve_collisions(&shared_game_state);
+                // Subdividir o passo de física em subpassos menores para reduzir tunneling
+                const int substeps = 3;
+                float sub_dt = dt / (float)substeps;
 
-                // Parar se velocidade ficar abaixo de um limite (para o jogo ficar mais dinâmico)
-                float speed2 = shared_game_state.ball_vx * shared_game_state.ball_vx +
-                               shared_game_state.ball_vy * shared_game_state.ball_vy;
-                const float MIN_SPEED2 = 10.0f * 10.0f; // velocidade mínima ~10 px/s
-                if (speed2 < MIN_SPEED2) {
-                    shared_game_state.ball_vx = 0.0f;
-                    shared_game_state.ball_vy = 0.0f;
-                    shared_game_state.shooting = 0;
+                for (int step = 0; step < substeps && shared_game_state.shooting; step++) {
+                    shared_game_state.ball_x += shared_game_state.ball_vx * sub_dt;
+                    shared_game_state.ball_y += shared_game_state.ball_vy * sub_dt;
+
+                    // Fricção aplicada em cada subpasso
+                    shared_game_state.ball_vx *= 0.97f;
+                    shared_game_state.ball_vy *= 0.97f;
+
+                    resolve_collisions(&shared_game_state);
+
+                    // Parar se velocidade ficar abaixo de um limite (para o jogo ficar mais dinâmico)
+                    float speed2 = shared_game_state.ball_vx * shared_game_state.ball_vx +
+                                   shared_game_state.ball_vy * shared_game_state.ball_vy;
+                    const float MIN_SPEED2 = 10.0f * 10.0f; // velocidade mínima ~10 px/s
+                    if (speed2 < MIN_SPEED2) {
+                        shared_game_state.ball_vx = 0.0f;
+                        shared_game_state.ball_vy = 0.0f;
+                        shared_game_state.shooting = 0;
+                    }
                 }
             }
 
@@ -383,7 +422,7 @@ void task_game_update(void *pvParameters) {
 
         // =================== Composição off-screen no framebuffer ===================
         // 1) Limpar framebuffer (fundo verde)
-        fb_clear(0x4354); // Verde RGB565
+        fb_clear(C_GREEN); // Verde RGB565
 
         // 2) Desenhar obstáculos do nível atual
         const obstacle_t* render_obstacles;
