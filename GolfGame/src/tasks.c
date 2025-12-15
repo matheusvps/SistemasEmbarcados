@@ -204,7 +204,7 @@ void task_mpu6050(void *pvParameters) {
 
 // Tarefa de atualização do jogo (física + renderização)
 void task_game_update(void *pvParameters) {
-    const TickType_t xDelay = pdMS_TO_TICKS(16); // ~60 FPS
+    const TickType_t xDelay = pdMS_TO_TICKS(16); // 30 FPS
     TickType_t xLastWakeTime = xTaskGetTickCount();
     accel_data_t accel_data;
     float dt = 0.016f; // 16ms
