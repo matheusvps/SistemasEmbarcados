@@ -432,7 +432,7 @@ void task_button(void *pvParameters) {
     
     for (;;) {
         // Ler força da célula de carga
-        float force = hx711_read_weight();  // Força em kg
+        float force = hx711_read_weight();  // Força em kg (já com offset/escala)
         const float MIN_FORCE = 0.02f;  // 20g mínimo para reduzir ruído
         float normalized = 0.0f;
         if (force > MIN_FORCE) {

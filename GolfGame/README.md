@@ -108,10 +108,10 @@ pio run -e blackpill_f411ce -t upload
 - SDA → PB9 (I2C1_SDA)
 
 ### Célula de Carga HX711
-- **HX711 VCC** → 5V
+- **HX711 VCC** → 3V3
 - **HX711 GND** → GND
-- **HX711 DT** → PB3 (GPIO / linha SDA de I2C2)
-- **HX711 SCK** → PB10 (GPIO / linha SCL de I2C2)
+- **HX711 DT** → PA1
+- **HX711 SCK** → PA2
 - **Célula de Carga** → HX711 (E+, E-, S+, S-)
 
 ### Pushbutton de Lançamento

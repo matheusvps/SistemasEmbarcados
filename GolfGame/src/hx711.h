@@ -10,8 +10,12 @@
 #define HX711_SCK_PIN  10
 
 // Calibração (ajustar conforme sua célula)
-#define HX711_OFFSET       8388608  // Offset padrão (meio da escala 24-bit)
+// Offset inicial 0: o offset real é aprendido via hx711_tare()
+#define HX711_OFFSET       0
 #define HX711_SCALE_FACTOR 1000.0f  // Fator de escala (ajustar com calibração)
+
+// Código de erro para leitura bruta (por exemplo, timeout)
+#define HX711_RAW_ERROR    ((int32_t)0x80000000)
 
 // Funções de inicialização
 void hx711_init(void);
@@ -27,4 +31,5 @@ void hx711_tare(void);  // Zerar a balança (tara)
 
 // Utilitários
 int hx711_is_ready(void);
+
 

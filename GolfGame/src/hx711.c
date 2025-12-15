@@ -1,6 +1,7 @@
 #include "hx711.h"
 #include "stm32f4xx.h"
 #include <stdint.h>
+#include <stdio.h>
 
 // Variáveis de calibração
 static int32_t hx711_offset = HX711_OFFSET;
@@ -24,10 +25,9 @@ void hx711_init(void) {
     // Habilitar clock do GPIOB
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
     
-    // Configurar DT como entrada (pull-up)
+    // Configurar DT como entrada, sem pull-up/pull-down (HX711 já controla a linha)
     GPIOB->MODER &= ~(3u << (HX711_DT_PIN * 2));
     GPIOB->PUPDR &= ~(3u << (HX711_DT_PIN * 2));
-    GPIOB->PUPDR |= (1u << (HX711_DT_PIN * 2));
     
     // Configurar SCK como saída (inicialmente LOW)
     GPIOB->MODER &= ~(3u << (HX711_SCK_PIN * 2));
@@ -49,12 +49,18 @@ int hx711_is_ready(void) {
 // Lê valor bruto de 24 bits do HX711
 int32_t hx711_read_raw(void) {
     int32_t value = 0;
-    
-    // Aguardar HX711 ficar pronto
+    int timeout = 5000; // número de tentativas de espera
+
+    // Aguardar HX711 ficar pronto, com timeout
     while (!hx711_is_ready()) {
-        // Timeout - retornar 0 se demorar muito
-        volatile int timeout = 10000;
-        if (--timeout == 0) return 0;
+        if (--timeout == 0) {
+            // timeout → erro (provavelmente DT preso em HIGH ou sem alimentação)
+            printf("HX711 ERRO: timeout esperando pronto (DT nao foi para LOW)\n");
+            return HX711_RAW_ERROR;
+        }
+
+        // Pequeno atraso entre checagens para não esgotar o timeout em microssegundos
+        for (volatile int j = 0; j < 5000; j++);
     }
     
     // Ler 24 bits (MSB first)
@@ -62,8 +68,8 @@ int32_t hx711_read_raw(void) {
         // Clock HIGH
         pin_set(HX711_SCK_PORT, HX711_SCK_PIN);
         
-        // Pequeno delay
-        for (volatile int j = 0; j < 2; j++);
+        // Pequeno delay (clock mais lento, HX711 é bem devagar)
+        for (volatile int j = 0; j < 50; j++);
         
         // Ler bit
         value = value << 1;
@@ -75,12 +81,12 @@ int32_t hx711_read_raw(void) {
         pin_clr(HX711_SCK_PORT, HX711_SCK_PIN);
         
         // Pequeno delay
-        for (volatile int j = 0; j < 2; j++);
+        for (volatile int j = 0; j < 50; j++);
     }
     
     // Configurar canal e ganho (canal A, ganho 128)
     pin_set(HX711_SCK_PORT, HX711_SCK_PIN);
-    for (volatile int j = 0; j < 2; j++);
+    for (volatile int j = 0; j < 50; j++);
     pin_clr(HX711_SCK_PORT, HX711_SCK_PIN);
     
     // Converter de complemento de 2 para signed
@@ -94,13 +100,19 @@ int32_t hx711_read_raw(void) {
 // Lê peso calibrado em kg
 float hx711_read_weight(void) {
     int32_t raw = hx711_read_raw();
-    if (raw == 0) return 0.0f;  // Erro na leitura
+    if (raw == HX711_RAW_ERROR) {
+        // Erro na leitura (por exemplo, timeout): não há peso válido
+        return 0.0f;
+    }
     
     // Aplicar offset e escala
     float weight = ((float)(raw - hx711_offset)) / hx711_scale;
     
     // Retornar apenas valores positivos (força aplicada)
     if (weight < 0.0f) weight = 0.0f;
+
+    // Log de depuração: valor bruto e peso em kg
+    printf("HX711 raw=%ld peso=%.4f kg\n", (long)raw, weight);
     
     return weight;
 }
@@ -120,16 +132,23 @@ void hx711_tare(void) {
     // Ler várias amostras e calcular média
     int32_t sum = 0;
     const int samples = 10;
+    int valid_samples = 0;
     
     for (int i = 0; i < samples; i++) {
         int32_t raw = hx711_read_raw();
-        if (raw != 0) {
+        if (raw != HX711_RAW_ERROR) {
             sum += raw;
+            valid_samples++;
         }
         // Pequeno delay entre leituras
         for (volatile int j = 0; j < 1000; j++);
     }
-    
-    hx711_offset = sum / samples;
+
+    if (valid_samples > 0) {
+        hx711_offset = sum / valid_samples;
+        printf("HX711 tara: offset=%ld (amostras validas=%d)\n", (long)hx711_offset, valid_samples);
+    } else {
+        printf("HX711 tara FALHOU: nenhuma amostra valida (todas erro)\n");
+    }
 }
 
