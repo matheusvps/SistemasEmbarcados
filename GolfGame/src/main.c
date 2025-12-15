@@ -52,12 +52,4 @@ int main(void) {
     return 0;
 }
 
-// Handler do SysTick (usado pelo FreeRTOS)
-void xPortSysTickHandler(void);
-
-// Handler do SysTick precisa chamar o do FreeRTOS
-void SysTick_Handler(void) {
-    if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED) {
-        xPortSysTickHandler();
-    }
-}
+// Não é necessário definir SysTick_Handler aqui; o FreeRTOS fornece o handler
