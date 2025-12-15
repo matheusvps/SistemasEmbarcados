@@ -1,0 +1,29 @@
+# PlatformIO
+.pio/
+.vscode/
+
+# Build artifacts
+*.o
+*.elf
+*.hex
+*.bin
+*.map
+
+# Compiled files
+*.a
+*.so
+*.dylib
+
+# Debug files
+*.dSYM/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
