@@ -21,17 +21,17 @@ static inline int pin_read(GPIO_TypeDef* port, uint32_t pin) {
 
 // Inicialização do HX711
 void hx711_init(void) {
-    // Habilitar clock do GPIOA
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+    // Habilitar clock do GPIOB
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
     
     // Configurar DT como entrada (pull-up)
-    GPIOA->MODER &= ~(3u << (HX711_DT_PIN * 2));
-    GPIOA->PUPDR &= ~(3u << (HX711_DT_PIN * 2));
-    GPIOA->PUPDR |= (1u << (HX711_DT_PIN * 2));
+    GPIOB->MODER &= ~(3u << (HX711_DT_PIN * 2));
+    GPIOB->PUPDR &= ~(3u << (HX711_DT_PIN * 2));
+    GPIOB->PUPDR |= (1u << (HX711_DT_PIN * 2));
     
     // Configurar SCK como saída (inicialmente LOW)
-    GPIOA->MODER &= ~(3u << (HX711_SCK_PIN * 2));
-    GPIOA->MODER |= (1u << (HX711_SCK_PIN * 2));
+    GPIOB->MODER &= ~(3u << (HX711_SCK_PIN * 2));
+    GPIOB->MODER |= (1u << (HX711_SCK_PIN * 2));
     pin_clr(HX711_SCK_PORT, HX711_SCK_PIN);
     
     // Aguardar HX711 ficar pronto

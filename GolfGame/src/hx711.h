@@ -3,11 +3,11 @@
 #include "stm32f4xx.h"
 
 // Pinos HX711 (configuráveis)
-// NOTA: PA7 é usado pelo SPI1 (LCD), então usamos PA8 para SCK
-#define HX711_DT_PORT  GPIOA
-#define HX711_DT_PIN   6
-#define HX711_SCK_PORT GPIOA
-#define HX711_SCK_PIN  8
+// PB10 - SCK HX711, PB3 - DT HX711
+#define HX711_DT_PORT  GPIOB
+#define HX711_DT_PIN   3
+#define HX711_SCK_PORT GPIOB
+#define HX711_SCK_PIN  10
 
 // Calibração (ajustar conforme sua célula)
 #define HX711_OFFSET       8388608  // Offset padrão (meio da escala 24-bit)

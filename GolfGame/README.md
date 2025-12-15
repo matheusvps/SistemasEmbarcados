@@ -110,9 +110,12 @@ pio run -e blackpill_f411ce -t upload
 ### Célula de Carga HX711
 - **HX711 VCC** → 5V
 - **HX711 GND** → GND
-- **HX711 DT** → PA6 (GPIO)
-- **HX711 SCK** → PA8 (GPIO)
+- **HX711 DT** → PB3 (GPIO / linha SDA de I2C2)
+- **HX711 SCK** → PB10 (GPIO / linha SCL de I2C2)
 - **Célula de Carga** → HX711 (E+, E-, S+, S-)
+
+### Pushbutton de Lançamento
+- **PB7** → Pushbutton (entrada com pull‑up interno, usado para disparar a tacada)
 
 **Nota**: PA7 é usado pelo SPI1 (LCD), então usamos PA8 para SCK do HX711.
 

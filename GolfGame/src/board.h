@@ -27,14 +27,14 @@
 #define C_CYAN  0x07FF
 #define C_MAG   0xF81F
 
-/* Botão de disparo */
-#define BUTTON_SHOOT_PORT GPIOA
-#define BUTTON_SHOOT_PIN  10
+/* Botão de disparo (PB7) */
+#define BUTTON_SHOOT_PORT GPIOB
+#define BUTTON_SHOOT_PIN  7
 
-/* Célula de Carga HX711 */
-// NOTA: PA7 é usado pelo SPI1 (LCD), então usamos PA8 para SCK
-#define HX711_DT_PORT  GPIOA
-#define HX711_DT_PIN   6
-#define HX711_SCK_PORT GPIOA
-#define HX711_SCK_PIN  8
+/* Célula de Carga HX711 (usando GPIOB / I2C2 pinos físicos) */
+// PB10 -> SCK HX711, PB3 -> DT HX711
+#define HX711_DT_PORT  GPIOB
+#define HX711_DT_PIN   3
+#define HX711_SCK_PORT GPIOB
+#define HX711_SCK_PIN  10
 

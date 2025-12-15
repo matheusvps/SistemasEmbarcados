@@ -67,7 +67,8 @@ static inline int button_is_pressed(void) {
 }
 
 static void button_init(void) {
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+    // Habilitar clock do GPIOB (onde está o pushbutton PB7)
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
     BUTTON_SHOOT_PORT->MODER &= ~(3u << (BUTTON_SHOOT_PIN * 2));
     BUTTON_SHOOT_PORT->PUPDR &= ~(3u << (BUTTON_SHOOT_PIN * 2));
     BUTTON_SHOOT_PORT->PUPDR |= (1u << (BUTTON_SHOOT_PIN * 2)); // pull-up
