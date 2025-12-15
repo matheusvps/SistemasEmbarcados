@@ -27,12 +27,65 @@ typedef struct {
     float h;
 } obstacle_t;
 
-static const obstacle_t obstacles[] = {
+// Obstáculos por nível (até 5 níveis)
+static const obstacle_t level1_obstacles[] = {
     { 110.0f, 60.0f, 20.0f, 70.0f },
     { 70.0f, 150.0f, 80.0f, 15.0f },
     { 160.0f, 170.0f, 15.0f, 40.0f },
 };
-static const size_t obstacle_count = sizeof(obstacles) / sizeof(obstacles[0]);
+
+static const obstacle_t level2_obstacles[] = {
+    { 90.0f, 80.0f, 60.0f, 15.0f },
+    { 40.0f, 130.0f, 20.0f, 60.0f },
+    { 150.0f, 140.0f, 70.0f, 15.0f },
+};
+
+static const obstacle_t level3_obstacles[] = {
+    { 60.0f, 60.0f, 120.0f, 15.0f },
+    { 60.0f, 160.0f, 120.0f, 15.0f },
+};
+
+static const obstacle_t level4_obstacles[] = {
+    { 80.0f, 60.0f, 20.0f, 80.0f },
+    { 140.0f, 100.0f, 20.0f, 80.0f },
+    { 40.0f, 150.0f, 160.0f, 15.0f },
+};
+
+static const obstacle_t level5_obstacles[] = {
+    { 60.0f, 60.0f, 120.0f, 15.0f },
+    { 60.0f, 180.0f, 120.0f, 15.0f },
+    { 40.0f, 90.0f, 15.0f, 80.0f },
+    { 185.0f, 90.0f, 15.0f, 80.0f },
+};
+
+static void get_obstacles_for_level(uint8_t level,
+                                    const obstacle_t** obstacles_out,
+                                    size_t* count_out)
+{
+    switch (level) {
+        case 1:
+        default:
+            *obstacles_out = level1_obstacles;
+            *count_out = sizeof(level1_obstacles) / sizeof(level1_obstacles[0]);
+            break;
+        case 2:
+            *obstacles_out = level2_obstacles;
+            *count_out = sizeof(level2_obstacles) / sizeof(level2_obstacles[0]);
+            break;
+        case 3:
+            *obstacles_out = level3_obstacles;
+            *count_out = sizeof(level3_obstacles) / sizeof(level3_obstacles[0]);
+            break;
+        case 4:
+            *obstacles_out = level4_obstacles;
+            *count_out = sizeof(level4_obstacles) / sizeof(level4_obstacles[0]);
+            break;
+        case 5:
+            *obstacles_out = level5_obstacles;
+            *count_out = sizeof(level5_obstacles) / sizeof(level5_obstacles[0]);
+            break;
+    }
+}
 
 // Objetos de sincronização
 QueueHandle_t accel_queue;
@@ -101,7 +154,11 @@ static void resolve_collisions(game_state_t* state) {
         state->ball_vy = -state->ball_vy * 0.6f;
     }
 
-    // Colisão com obstáculos retangulares
+    // Colisão com obstáculos retangulares (dependem do nível)
+    const obstacle_t* obstacles;
+    size_t obstacle_count;
+    get_obstacles_for_level(state->level, &obstacles, &obstacle_count);
+
     for (size_t i = 0; i < obstacle_count; i++) {
         if (circle_rect_collision(state->ball_x, state->ball_y, BALL_RADIUS, &obstacles[i])) {
             // Empurrar bola para fora do obstáculo invertendo componente dominante
@@ -210,7 +267,8 @@ void task_game_update(void *pvParameters) {
     const TickType_t xDelay = pdMS_TO_TICKS(50); // 20 FPS
     TickType_t xLastWakeTime = xTaskGetTickCount();
     accel_data_t accel_data;
-    float dt = 0.016f; // 16ms
+    // Passo de tempo deve bater com o período da tarefa (~50 ms)
+    float dt = 0.05f; // 50ms
     int last_button_state = 0;
     
     printf("Tarefa Game Update iniciada\n");
@@ -218,6 +276,8 @@ void task_game_update(void *pvParameters) {
     // Inicializar estado do jogo
     if (xSemaphoreTake(game_mutex, portMAX_DELAY) == pdTRUE) {
         reset_ball(&shared_game_state);
+        shared_game_state.level = 1;
+        shared_game_state.score = 0;
         shared_game_state.aim_theta = 0.0f;
         shared_game_state.button_pressed = 0;
         shared_game_state.strokes = 0;
@@ -230,7 +290,7 @@ void task_game_update(void *pvParameters) {
         if (xQueueReceive(accel_queue, &accel_data, 0) == pdTRUE) {
             // Usar acelerômetro para definir direção
             // ax e ay definem a direção do tiro
-            float angle = atan2f(accel_data.ay, accel_data.ax);
+            float angle = atan2f(accel_data.ay, accel_data.ax) + M_PI;
             
             if (xSemaphoreTake(game_mutex, portMAX_DELAY) == pdTRUE) {
                 if (!shared_game_state.shooting) {
@@ -247,6 +307,10 @@ void task_game_update(void *pvParameters) {
             if (shared_game_state.hole_completed && shared_game_state.button_pressed && !last_button_state) {
                 shared_game_state.hole_completed = 0;
                 shared_game_state.strokes = 0;
+                // Avança de nível até o máximo de 5
+                if (shared_game_state.level < 5) {
+                    shared_game_state.level++;
+                }
                 reset_ball(&shared_game_state);
             }
 
@@ -254,8 +318,9 @@ void task_game_update(void *pvParameters) {
             if (shared_game_state.button_pressed && !last_button_state && 
                 !shared_game_state.shooting && !shared_game_state.hole_completed) {
                 float shot_power = clampf(shared_game_state.power, 0.05f, 1.0f);
-                shared_game_state.ball_vx = shot_power * 220.0f * cosf(shared_game_state.aim_theta);
-                shared_game_state.ball_vy = shot_power * 220.0f * sinf(shared_game_state.aim_theta);
+                // Aumenta o ganho de velocidade para deixar a bola mais rápida
+                shared_game_state.ball_vx = shot_power * 320.0f * cosf(shared_game_state.aim_theta);
+                shared_game_state.ball_vy = shot_power * 320.0f * sinf(shared_game_state.aim_theta);
                 shared_game_state.shooting = 1;
                 shared_game_state.power = 0.0f;
                 shared_game_state.strokes++;
@@ -267,13 +332,17 @@ void task_game_update(void *pvParameters) {
                 shared_game_state.ball_x += shared_game_state.ball_vx * dt;
                 shared_game_state.ball_y += shared_game_state.ball_vy * dt;
                 
-                // Fricção
-                shared_game_state.ball_vx *= 0.95f;
-                shared_game_state.ball_vy *= 0.95f;
+                // Fricção (um pouco menor para a bola rolar mais)
+                shared_game_state.ball_vx *= 0.97f;
+                shared_game_state.ball_vy *= 0.97f;
+                
+                resolve_collisions(&shared_game_state);
 
-                // Parar se velocidade muito baixa
-                if (fabsf(shared_game_state.ball_vx) < 10.0f && 
-                    fabsf(shared_game_state.ball_vy) < 10.0f) {
+                // Parar se velocidade ficar abaixo de um limite (para o jogo ficar mais dinâmico)
+                float speed2 = shared_game_state.ball_vx * shared_game_state.ball_vx +
+                               shared_game_state.ball_vy * shared_game_state.ball_vy;
+                const float MIN_SPEED2 = 10.0f * 10.0f; // velocidade mínima ~10 px/s
+                if (speed2 < MIN_SPEED2) {
                     shared_game_state.ball_vx = 0.0f;
                     shared_game_state.ball_vy = 0.0f;
                     shared_game_state.shooting = 0;
@@ -288,6 +357,8 @@ void task_game_update(void *pvParameters) {
                 shared_game_state.shooting = 0;
                 shared_game_state.ball_vx = 0.0f;
                 shared_game_state.ball_vy = 0.0f;
+                // Aumenta pontuação ao acertar o buraco
+                shared_game_state.score += 1;
             }
             
             xSemaphoreGive(game_mutex);
@@ -316,12 +387,15 @@ void task_game_update(void *pvParameters) {
         // 1) Limpar framebuffer (fundo verde)
         fb_clear(C_GREEN); // Verde RGB565
 
-        // 2) Desenhar obstáculos
-        for (size_t i = 0; i < obstacle_count; i++) {
-            fb_fill_rect((int)obstacles[i].x, (int)obstacles[i].y,
-                         (int)obstacles[i].w, (int)obstacles[i].h, 0x7BEF);
-            fb_draw_rect((int)obstacles[i].x, (int)obstacles[i].y,
-                         (int)obstacles[i].w, (int)obstacles[i].h, C_BLACK);
+        // 2) Desenhar obstáculos do nível atual
+        const obstacle_t* render_obstacles;
+        size_t render_obstacle_count;
+        get_obstacles_for_level(state.level, &render_obstacles, &render_obstacle_count);
+        for (size_t i = 0; i < render_obstacle_count; i++) {
+            fb_fill_rect((int)render_obstacles[i].x, (int)render_obstacles[i].y,
+                         (int)render_obstacles[i].w, (int)render_obstacles[i].h, 0x7BEF);
+            fb_draw_rect((int)render_obstacles[i].x, (int)render_obstacles[i].y,
+                         (int)render_obstacles[i].w, (int)render_obstacles[i].h, C_BLACK);
         }
 
         // 3) Desenhar buraco
@@ -347,10 +421,10 @@ void task_game_update(void *pvParameters) {
             fb_fill_rect(11, 170 - power_height, 8, power_height, C_RED);
         }
 
-        // 7) Pontuação e status
+        // 7) Status no canto inferior direito: apenas Nível X/5
         char info[24];
-        snprintf(info, sizeof(info), "Tacadas: %u", state.strokes);
-        fb_draw_text_5x7(25, 190, info, C_WHITE, 1, 1, C_BLACK);
+        snprintf(info, sizeof(info), "Nivel: %u/5", state.level);
+        fb_draw_text_5x7(10, 228, info, C_WHITE, 1, 1, C_BLACK);
 
         if (state.hole_completed) {
             fb_draw_text_5x7(120, 210, "Buraco!", C_YELL, 2, 2, C_BLACK);
@@ -438,9 +512,17 @@ void task_button(void *pvParameters) {
         if (force > MIN_FORCE) {
             normalized = clampf(force / MAX_FORCE_KG, 0.0f, 1.0f);
         }
-        
+
         if (xSemaphoreTake(game_mutex, portMAX_DELAY) == pdTRUE) {
-            shared_game_state.power = normalized;
+            // Quando o buraco foi concluído, entramos em modo de espera:
+            // a barra de potência fica zerada até o jogador pressionar o botão
+            // para iniciar a próxima fase. Depois disso, o botão volta a lançar.
+            if (!shared_game_state.hole_completed && !shared_game_state.shooting) {
+                shared_game_state.power = normalized;
+            } else {
+                shared_game_state.power = 0.0f;
+            }
+
             shared_game_state.button_pressed = button_is_pressed();
             xSemaphoreGive(game_mutex);
         }

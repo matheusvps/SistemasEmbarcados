@@ -21,6 +21,8 @@ typedef struct {
     int button_pressed; // 1 se botão de disparo está pressionado
     uint16_t strokes;   // Contagem de tacadas
     uint8_t hole_completed; // 1 quando bola cai no buraco
+    uint16_t score;     // Pontuação total
+    uint8_t level;      // Nível atual (1..5)
 } game_state_t;
 
 // Estrutura para relógio

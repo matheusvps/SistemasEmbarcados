@@ -99,22 +99,15 @@ int32_t hx711_read_raw(void) {
 
 // Lê peso calibrado em kg
 float hx711_read_weight(void) {
-    int32_t raw = hx711_read_raw();
-    if (raw == HX711_RAW_ERROR) {
-        // Erro na leitura (por exemplo, timeout): não há peso válido
-        return 0.0f;
-    }
-    
-    // Aplicar offset e escala
-    float weight = ((float)(raw - hx711_offset)) / hx711_scale;
-    
-    // Retornar apenas valores positivos (força aplicada)
-    if (weight < 0.0f) weight = 0.0f;
+    // MODO DE TESTE:
+    // Para facilitar o teste da lógica ao pressionar (sem depender do sensor),
+    // estamos retornando um valor fixo em kg.
+    //
+    // Ajuste este valor conforme necessário para os seus testes.
+    const float peso_teste_kg = 5.0f;
 
-    // Log de depuração: valor bruto e peso em kg
-    printf("HX711 raw=%ld peso=%.4f kg\n", (long)raw, weight);
-    
-    return weight;
+    printf("HX711 MODO TESTE: retornando peso fixo = %.4f kg\n", peso_teste_kg);
+    return peso_teste_kg;
 }
 
 // Configurar offset
