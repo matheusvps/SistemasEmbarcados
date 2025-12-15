@@ -347,8 +347,6 @@ void task_game_update(void *pvParameters) {
                     shared_game_state.ball_vy = 0.0f;
                     shared_game_state.shooting = 0;
                 }
-
-                resolve_collisions(&shared_game_state);
             }
 
             // Detectar vitória
@@ -385,7 +383,7 @@ void task_game_update(void *pvParameters) {
 
         // =================== Composição off-screen no framebuffer ===================
         // 1) Limpar framebuffer (fundo verde)
-        fb_clear(C_GREEN); // Verde RGB565
+        fb_clear(0x4354); // Verde RGB565
 
         // 2) Desenhar obstáculos do nível atual
         const obstacle_t* render_obstacles;
@@ -489,14 +487,14 @@ void task_button(void *pvParameters) {
     const TickType_t xDelay = pdMS_TO_TICKS(50); // 20 Hz
     TickType_t xLastWakeTime = xTaskGetTickCount();
     
-    // Botão físico para disparo
-    button_init();
-
     // Inicializar HX711
     printf("Inicializando HX711 (Célula de Carga)...\n");
     hx711_init();
     printf("HX711 inicializado. Fazendo tara...\n");
     
+    // Botão físico para disparo
+    button_init();
+
     // Aguardar um pouco para estabilizar
     vTaskDelay(pdMS_TO_TICKS(500));
     
