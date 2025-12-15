@@ -8,7 +8,7 @@
 // todos os comandos apenas na parte visível daquela faixa e enviando por DMA.
 
 // Altura da faixa em pixels (ajustar se quiser mais/menos RAM usada).
-enum { FB_STRIPE_H = 32 };
+enum { FB_STRIPE_H = 120 };
 
 // Buffer da faixa: FB_STRIPE_H linhas x LCD_W colunas.
 static uint16_t fb_stripe[FB_STRIPE_H * LCD_W];

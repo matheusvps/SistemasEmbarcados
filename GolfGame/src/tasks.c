@@ -4,7 +4,6 @@
 #include "board.h"
 #include "serial.h"
 #include "st7789.h"
-#include "hx711.h"
 #include "framebuffer.h"
 #include <stdio.h>
 #include <math.h>
@@ -55,7 +54,8 @@ static const obstacle_t level5_obstacles[] = {
     { 60.0f, 60.0f, 120.0f, 15.0f },
     { 60.0f, 180.0f, 120.0f, 15.0f },
     { 40.0f, 90.0f, 15.0f, 80.0f },
-    { 185.0f, 90.0f, 15.0f, 80.0f },
+    { 185.0f, 90.0f, 15.0f, 30.0f },   // Parede direita superior (deixa abertura abaixo)
+    { 185.0f, 140.0f, 15.0f, 30.0f },  // Parede direita inferior (deixa abertura no meio)
 };
 
 static void get_obstacles_for_level(uint8_t level,
@@ -297,12 +297,15 @@ void task_mpu6050(void *pvParameters) {
 // Tarefa de atualização do jogo (física + renderização)
 void task_game_update(void *pvParameters) {
     (void)pvParameters;
-    const TickType_t xDelay = pdMS_TO_TICKS(50); // 20 FPS
+    const TickType_t xDelay = pdMS_TO_TICKS(50); // 60 FPS
     TickType_t xLastWakeTime = xTaskGetTickCount();
     accel_data_t accel_data;
     // Passo de tempo deve bater com o período da tarefa (~50 ms)
     float dt = 0.05f; // 50ms
     int last_button_state = 0;
+    // Variável para controlar a oscilação da barra de potência
+    static float power_oscillation_time = 0.0f;
+    const float POWER_OSCILLATION_SPEED = 2.0f; // Velocidade da oscilação (ciclos por segundo)
     
     printf("Tarefa Game Update iniciada\n");
     
@@ -323,7 +326,7 @@ void task_game_update(void *pvParameters) {
         if (xQueueReceive(accel_queue, &accel_data, 0) == pdTRUE) {
             // Usar acelerômetro para definir direção
             // ax e ay definem a direção do tiro
-            float angle = atan2f(accel_data.ay, accel_data.ax) + M_PI;
+            float angle = atan2f(accel_data.ax, accel_data.ay) + M_PI;
             
             if (xSemaphoreTake(game_mutex, portMAX_DELAY) == pdTRUE) {
                 if (!shared_game_state.shooting) {
@@ -336,6 +339,16 @@ void task_game_update(void *pvParameters) {
         
         // Atualizar física do jogo
         if (xSemaphoreTake(game_mutex, portMAX_DELAY) == pdTRUE) {
+            // Atualizar oscilação da barra de potência (apenas quando não está atirando e não completou o buraco)
+            if (!shared_game_state.shooting && !shared_game_state.hole_completed) {
+                power_oscillation_time += dt * POWER_OSCILLATION_SPEED;
+                // Usar seno para oscilar entre 0 e 1 (seno varia de -1 a 1, então ajustamos para 0 a 1)
+                shared_game_state.power = (sinf(power_oscillation_time * 2.0f * M_PI) + 1.0f) * 0.5f;
+            } else {
+                // Resetar o tempo de oscilação quando começar a atirar ou completar o buraco
+                power_oscillation_time = 0.0f;
+            }
+            
             // Permitir reset da fase após concluir o buraco
             if (shared_game_state.hole_completed && shared_game_state.button_pressed && !last_button_state) {
                 shared_game_state.hole_completed = 0;
@@ -526,40 +539,14 @@ void task_button(void *pvParameters) {
     const TickType_t xDelay = pdMS_TO_TICKS(50); // 20 Hz
     TickType_t xLastWakeTime = xTaskGetTickCount();
     
-    // Inicializar HX711
-    printf("Inicializando HX711 (Célula de Carga)...\n");
-    hx711_init();
-    printf("HX711 inicializado. Fazendo tara...\n");
-    
     // Botão físico para disparo
     button_init();
-
-    // Aguardar um pouco para estabilizar
-    vTaskDelay(pdMS_TO_TICKS(500));
-    
-    // Fazer tara (zerar)
-    hx711_tare();
-    printf("Tara concluída. Célula de carga pronta.\n");
+    printf("Botão de disparo inicializado. Barra de potência oscila automaticamente.\n");
     
     for (;;) {
-        // Ler força da célula de carga
-        float force = hx711_read_weight();  // Força em kg (já com offset/escala)
-        const float MIN_FORCE = 0.02f;  // 20g mínimo para reduzir ruído
-        float normalized = 0.0f;
-        if (force > MIN_FORCE) {
-            normalized = clampf(force / MAX_FORCE_KG, 0.0f, 1.0f);
-        }
-
+        // A barra de potência agora oscila automaticamente na tarefa task_game_update
+        // Esta tarefa apenas lê o estado do botão físico
         if (xSemaphoreTake(game_mutex, portMAX_DELAY) == pdTRUE) {
-            // Quando o buraco foi concluído, entramos em modo de espera:
-            // a barra de potência fica zerada até o jogador pressionar o botão
-            // para iniciar a próxima fase. Depois disso, o botão volta a lançar.
-            if (!shared_game_state.hole_completed && !shared_game_state.shooting) {
-                shared_game_state.power = normalized;
-            } else {
-                shared_game_state.power = 0.0f;
-            }
-
             shared_game_state.button_pressed = button_is_pressed();
             xSemaphoreGive(game_mutex);
         }
